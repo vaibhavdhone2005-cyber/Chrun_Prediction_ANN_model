@@ -1,5 +1,5 @@
-Flask
-gunicorn
+streamlit
+keras
+tensorflow
 numpy
-tensorflow-cpu
-tf-keras
+pandas
