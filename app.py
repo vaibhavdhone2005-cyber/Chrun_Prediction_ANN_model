@@ -1,280 +1,198 @@
-import os
+import streamlit as st
 import numpy as np
-from flask import Flask, request, render_template_string
+import pandas as pd
+import keras
+import pickle
 
-# Force TensorFlow to run on CPU and reduce log verbosity
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# Page configuration for a professional executive look
+st.set_page_config(
+    page_title="Executive AI Portal | ANN Model Deployment",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-import tensorflow as tf
+# Custom CSS for executive dark theme, glassmorphic cards, and typography
+st.markdown("""
+    <style>
+    /* Main Background and Text Defaults */
+    .stApp {
+        background-color: #0E1117;
+        color: #E0E6ED;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    
+    /* Header Container Styling */
+    .header-container {
+        padding: 2rem 0rem 1.5rem 0rem;
+        border-bottom: 1px solid #1E293B;
+        margin-bottom: 2rem;
+    }
+    .header-title {
+        font-size: 2.25rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #38BDF8 0%, #818CF8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+    }
+    .header-subtitle {
+        color: #94A3B8;
+        font-size: 1rem;
+    }
+    
+    /* Card Container Styling */
+    .css-card {
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Prediction Output Dashboard Cards */
+    .metric-card {
+        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+    }
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #38BDF8;
+    }
+    .metric-label {
+        color: #94A3B8;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    /* Custom Styling for Streamlit Buttons */
+    .stButton > button {
+        width: 100%;
+        background: linear-gradient(90deg, #2563EB 0%, #3D82F6 100%);
+        color: #FFFFFF;
+        font-weight: 600;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #1D4ED8 0%, #2563EB 100%);
+        box-shadow: 0 0 12px rgba(37, 99, 235, 0.5);
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-app = Flask(__name__)
 
-# Load the ANN model
-MODEL_PATH = "ANN_model.pkl"
+@st.cache_resource
+def load_model():
+    """Loads the Keras 3 sequential model binary."""
+    with open("ANN_model.pkl", "rb") as f:
+        model = pickle.load(f)
+    return model
 
 try:
-    # Keras models serialized via pickle can be loaded using tf.keras
-    import pickle
-    with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
-    print("Model loaded successfully via Pickle.")
+    model = load_model()
+    model_loaded = True
 except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
+    model_loaded = False
+    load_error = str(e)
 
-# High-end Executive UI Design (Dark Theme HTML/CSS)
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise AI Prediction Engine</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-color: #0b0f19;
-            --card-bg: #111827;
-            --accent-blue: #2563eb;
-            --accent-glow: #3b82f6;
-            --text-main: #f9fafb;
-            --text-sub: #9ca3af;
-            --border-color: #1f2937;
-            --input-bg: #1f2937;
-            --success-green: #10b981;
-            --alert-red: #ef4444;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 900px;
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            overflow: hidden;
-        }
-
-        .header {
-            padding: 2.5rem 2.5rem 1.5rem 2.5rem;
-            border-bottom: 1px solid var(--border-color);
-            background: linear-gradient(180deg, rgba(37, 99, 235, 0.08) 0%, rgba(17, 24, 39, 0) 100%);
-        }
-
-        .header h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            letter-spacing: -0.025em;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .header h1 span {
-            color: var(--accent-glow);
-        }
-
-        .header p {
-            color: var(--text-sub);
-            font-size: 0.95rem;
-            margin-top: 6px;
-        }
-
-        .form-container {
-            padding: 2.5rem;
-        }
-
-        .grid-inputs {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 1.25rem;
-            margin-bottom: 2rem;
-        }
-
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .input-group label {
-            font-size: 0.825rem;
-            font-weight: 600;
-            color: var(--text-sub);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .input-group input {
-            background-color: var(--input-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 10px 14px;
-            color: #ffffff;
-            font-size: 0.95rem;
-            outline: none;
-            transition: all 0.2s ease;
-        }
-
-        .input-group input:focus {
-            border-color: var(--accent-glow);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-        }
-
-        .btn-submit {
-            width: 100%;
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-            color: #ffffff;
-            font-weight: 600;
-            font-size: 1rem;
-            padding: 14px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-        }
-
-        .btn-submit:hover {
-            opacity: 0.95;
-            transform: translateY(-1px);
-        }
-
-        .result-card {
-            margin-top: 2rem;
-            padding: 1.5rem;
-            border-radius: 12px;
-            background: #1f2937;
-            border-left: 4px solid var(--accent-blue);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .result-title {
-            font-size: 0.875rem;
-            color: var(--text-sub);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .result-score {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #ffffff;
-        }
-
-        .badge {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .badge-positive {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--success-green);
-            border: 1px solid var(--success-green);
-        }
-
-        .badge-negative {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--alert-red);
-            border: 1px solid var(--alert-red);
-        }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <div class="header">
-        <h1><span>ANN</span> Intelligence Engine</h1>
-        <p>Enterprise Predictive Analysis Dashboard (10-Feature Neural Model)</p>
+# Top Navigation Bar
+st.markdown("""
+    <div class="header-container">
+        <div class="header-title">Artificial Neural Network Intelligence Dashboard</div>
+        <div class="header-subtitle">Enterprise Machine Learning Inference Portal & Customer Analytics</div>
     </div>
+""", unsafe_allow_html=True)
 
-    <div class="form-container">
-        <form method="POST" action="/predict">
-            <div class="grid-inputs">
-                {% for i in range(1, 11) %}
-                <div class="input-group">
-                    <label for="feature_{{ i }}">Feature {{ i }}</label>
-                    <input type="number" step="any" id="feature_{{ i }}" name="feature_{{ i }}" 
-                           value="{{ inputs[i-1] if inputs else '0.0' }}" required>
-                </div>
-                {% endfor %}
-            </div>
+# Main Application Layout
+col_left, col_right = st.columns([1.2, 0.8], gap="large")
 
-            <button type="submit" class="btn-submit">Run Predictive Analysis</button>
-        </form>
+with col_left:
+    st.markdown("### 🎛️ Input Parameters")
+    st.caption("Adjust the 10 feature values below to generate real-time neural network predictions.")
+    
+    if not model_loaded:
+        st.error(f"Error loading `ANN_model.pkl`: {load_error}")
+    
+    # Grid layout for inputs (10 Features extracted from model configuration)
+    f_col1, f_col2 = st.columns(2)
+    
+    with f_col1:
+        feature_1 = st.number_input("Feature 1", value=0.5, step=0.1, help="Input parameter 1")
+        feature_2 = st.number_input("Feature 2", value=100.0, step=1.0, help="Input parameter 2")
+        feature_3 = st.number_input("Feature 3", value=30.0, step=1.0, help="Input parameter 3")
+        feature_4 = st.number_input("Feature 4", value=3.0, step=0.1, help="Input parameter 4")
+        feature_5 = st.number_input("Feature 5", value=1.0, step=0.1, help="Input parameter 5")
 
-        {% if probability is not none %}
-        <div class="result-card">
-            <div>
-                <div class="result-title">Model Output Probability</div>
-                <div class="result-score">{{ "%.2f"|format(probability * 100) }}%</div>
+    with f_col2:
+        feature_6 = st.number_input("Feature 6", value=0.0, step=0.1, help="Input parameter 6")
+        feature_7 = st.number_input("Feature 7", value=50.0, step=0.5, help="Input parameter 7")
+        feature_8 = st.number_input("Feature 8", value=12.0, step=0.1, help="Input parameter 8")
+        feature_9 = st.number_input("Feature 9", value=0.8, step=0.05, help="Input parameter 9")
+        feature_10 = st.number_input("Feature 10", value=2.5, step=0.1, help="Input parameter 10")
+
+    predict_btn = st.button("🚀 Run Neural Inference")
+
+with col_right:
+    st.markdown("### 📊 Inference Results")
+    
+    if predict_btn and model_loaded:
+        # Prepare input tensor shape (1, 10)
+        input_data = np.array([[
+            feature_1, feature_2, feature_3, feature_4, feature_5,
+            feature_6, feature_7, feature_8, feature_9, feature_10
+        ]], dtype=np.float32)
+        
+        # Run prediction
+        raw_prediction = model.predict(input_data)[0][0]
+        probability_pct = raw_prediction * 100
+        classification = "High Value / Positive" if raw_prediction >= 0.5 else "Low Value / Negative"
+        
+        # Displays Executive Card Metrics
+        st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Model Probability Output</div>
+                <div class="metric-value">{probability_pct:.2f}%</div>
             </div>
-            <div>
-                {% if class_label == 1 %}
-                <span class="badge badge-positive">HIGH PROBABILITY (Class 1)</span>
-                {% else %}
-                <span class="badge badge-negative">LOW PROBABILITY (Class 0)</span>
-                {% endif %}
-            </div>
+        """, unsafe_allow_html=True)
+        
+        st.write("")
+        
+        # Binary Classification Badge
+        if raw_prediction >= 0.5:
+            st.success(f"**Classification Outcome:** {classification}")
+        else:
+            st.warning(f"**Classification Outcome:** {classification}")
+
+        # Probability Bar Visualization
+        st.markdown("**Confidence Index**")
+        st.progress(float(raw_prediction))
+
+        # Model Structure Summary Overview
+        with st.expander("🔍 Neural Network Architecture Details"):
+            st.markdown("""
+            * **Input Shape:** `(None, 10)`
+            * **Dense Layer 1:** `8 Units (ReLU)`
+            * **Dense Layer 2:** `7 Units (ReLU)`
+            * **Output Layer:** `1 Unit (Sigmoid)`
+            * **Optimizer:** `Adam (lr=0.001)`
+            """)
+    else:
+        st.info("Adjust input feature values on the left panel and click **Run Neural Inference** to trigger evaluation.")
+
+    # Executive Summary Card
+    st.markdown("""
+        <div style="margin-top: 2rem; padding: 1rem; background-color: #1E293B; border-radius: 8px; border-left: 4px solid #38BDF8;">
+            <p style="margin: 0; font-size: 0.85rem; color: #94A3B8;">
+                <strong>Enterprise Note:</strong> Model loaded directly from serialized Keras 3 artifact using binary classification sigmoid output activation.
+            </p>
         </div>
-        {% endif %}
-    </div>
-</div>
-
-</body>
-</html>
-"""
-
-@app.route("/", methods=["GET"])
-def home():
-    return render_template_string(HTML_TEMPLATE, probability=None, inputs=None)
-
-@app.route("/predict", methods=["POST"])
-def predict():
-    if model is None:
-        return "Model not loaded correctly.", 500
-
-    try:
-        # Extract 10 numerical inputs from form request
-        input_features = [float(request.form[f"feature_{i}"]) for i in range(1, 11)]
-        features_array = np.array([input_features], dtype=np.float32)
-
-        # Predict probability using the loaded ANN model
-        prediction = model.predict(features_array)
-        prob = float(prediction[0][0])
-        class_output = 1 if prob >= 0.5 else 0
-
-        return render_template_string(
-            HTML_TEMPLATE, 
-            probability=prob, 
-            class_label=class_output, 
-            inputs=input_features
-        )
-    except Exception as e:
-        return f"Error processing prediction: {str(e)}", 400
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    """, unsafe_allow_html=True)
